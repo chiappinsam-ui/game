@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Strikepoint</title>
+<meta name="description" content="Strikepoint — a browser-based 5v5 tactical shooter built with Three.js. Rounds, economy, plant/defuse, bots and escalating kill sounds up to ACE.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- ===== START SCREEN ===== -->
+<section id="start-screen" class="overlay">
+  <div class="start-card">
+    <div class="eyebrow">TACTICAL 5v5 · FIRST TO <span id="start-rounds-label">7</span></div>
+    <h1 class="logo">STRIKE<span>POINT</span></h1>
+    <p class="lede">Attack or defend two sites on <strong>Foundry</strong>. Plant the charge, hold the angles, win rounds, earn credits, buy better guns. Every kill in a round raises the stakes — five in one round is an <strong>ACE</strong>.</p>
+
+    <div class="start-grid">
+      <div class="keys">
+        <h3>Controls</h3>
+        <ul>
+          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move · <kbd>Shift</kbd> Walk (silent) · <kbd>Ctrl</kbd> Crouch · <kbd>Space</kbd> Jump</li>
+          <li><kbd>LMB</kbd> Fire · <kbd>RMB</kbd> Aim down sights · <kbd>R</kbd> Reload</li>
+          <li><kbd>1</kbd> Primary · <kbd>2</kbd> Sidearm · <kbd>3</kbd> Knife · <kbd>Q</kbd> Last weapon · <kbd>Scroll</kbd> Cycle</li>
+          <li><kbd>4</kbd> Charge (attack) · <kbd>E</kbd> Hold to plant / defuse · <kbd>G</kbd> Drop weapon</li>
+          <li><kbd>B</kbd> Buy menu (buy phase) · <kbd>Tab</kbd> Scoreboard · <kbd>M</kbd> Toggle minimap</li>
+          <li><kbd>Esc</kbd> Pause / release mouse</li>
+        </ul>
+      </div>
+      <div class="settings">
+        <h3>Settings</h3>
+        <label>Mouse sensitivity <span id="sens-val">1.0</span>
+          <input id="opt-sens" type="range" min="0.2" max="3" step="0.05" value="1"></label>
+        <label>Field of view <span id="fov-val">90</span>
+          <input id="opt-fov" type="range" min="70" max="110" step="1" value="90"></label>
+        <label>Master volume <span id="vol-val">80%</span>
+          <input id="opt-vol" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+        <label>Rounds to win
+          <select id="opt-rounds">
+            <option value="4">4 (quick)</option>
+            <option value="7" selected>7 (standard)</option>
+            <option value="13">13 (full match)</option>
+          </select></label>
+        <label>Bot difficulty
+          <select id="opt-diff">
+            <option value="0.6">Recruit</option>
+            <option value="1" selected>Regular</option>
+            <option value="1.5">Veteran</option>
+            <option value="2.2">Radiant-tier</option>
+          </select></label>
+        <label class="check"><input id="opt-shadows" type="checkbox" checked> Dynamic shadows</label>
+        <label class="check"><input id="opt-announcer" type="checkbox" checked> Voice announcer</label>
+      </div>
+    </div>
+
+    <button id="btn-play" class="btn-primary">DEPLOY — CLICK TO PLAY</button>
+    <p class="fine" id="start-note">Click Deploy, then click the game to lock your mouse. Sound starts on first click. Desktop browser recommended (Chrome, Edge, Firefox).</p>
+    <p class="fine" id="mobile-warning" hidden>You're on a touch device. Strikepoint needs a mouse and keyboard — open this page on a desktop browser.</p>
+  </div>
+</section>
+
+<!-- ===== HUD ===== -->
+<div id="hud" hidden>
+  <div id="crosshair">
+    <span class="ch ch-t"></span><span class="ch ch-b"></span><span class="ch ch-l"></span><span class="ch ch-r"></span><span class="ch-dot"></span>
+  </div>
+  <div id="hitmarker"><span></span><span></span><span></span><span></span></div>
+  <div id="scope" hidden><div class="scope-ring"></div><div class="scope-h"></div><div class="scope-v"></div></div>
+
+  <div id="vignette"></div>
+  <div id="flashbang"></div>
+  <div id="dmg-dir"></div>
+
+  <!-- Top center: score & timer -->
+  <div id="top-bar">
+    <div class="team-score ally"><span class="label">ALLIES</span><span id="score-ally">0</span></div>
+    <div class="timer-box">
+      <div id="round-phase">BUY PHASE</div>
+      <div id="round-timer">0:30</div>
+      <div id="round-num">ROUND 1</div>
+    </div>
+    <div class="team-score enemy"><span id="score-enemy">0</span><span class="label">ENEMIES</span></div>
+  </div>
+  <div id="alive-bar">
+    <div id="alive-ally" class="alive ally"></div>
+    <div id="alive-enemy" class="alive enemy"></div>
+  </div>
+
+  <!-- Top left: minimap -->
+  <canvas id="minimap" width="220" height="220"></canvas>
+
+  <!-- Bottom left: health / shield -->
+  <div id="vitals">
+    <div class="vital hp"><span class="ico">✚</span><span id="hp-val">100</span><div class="bar"><i id="hp-bar"></i></div></div>
+    <div class="vital sh"><span class="ico">◈</span><span id="sh-val">0</span><div class="bar"><i id="sh-bar"></i></div></div>
+    <div id="credits">◆ <span id="cred-val">800</span></div>
+  </div>
+
+  <!-- Bottom right: weapon -->
+  <div id="weapon-panel">
+    <div id="weapon-name">HAWK-9</div>
+    <div id="ammo"><span id="ammo-mag">12</span><span class="sep">/</span><span id="ammo-res">36</span></div>
+    <div id="weapon-slots">
+      <span class="slot" data-slot="1">1 <b id="slot-primary">—</b></span>
+      <span class="slot" data-slot="2">2 <b id="slot-secondary">HAWK-9</b></span>
+      <span class="slot" data-slot="3">3 <b>KNIFE</b></span>
+      <span class="slot" data-slot="4" id="slot-charge" hidden>4 <b>CHARGE</b></span>
+    </div>
+    <div id="reload-hint" hidden>RELOADING</div>
+  </div>
+
+  <!-- Kill feed -->
+  <div id="killfeed"></div>
+
+  <!-- Center notices -->
+  <div id="announce"></div>
+  <div id="streak-banner" class="hide"><div class="streak-title"></div><div class="streak-sub"></div></div>
+  <div id="round-banner" class="hide"><div class="rb-title"></div><div class="rb-sub"></div></div>
+  <div id="interact-prompt" hidden><div class="ip-text"></div><div class="ip-bar"><i></i></div></div>
+  <div id="spike-status" hidden>◉ CHARGE PLANTED — <span id="spike-timer">45</span></div>
+  <div id="spectate" hidden>YOU ARE DEAD · SPECTATING <b id="spec-name"></b> · <span id="spec-hint">Your team is still fighting</span></div>
+  <div id="buy-hint">Press <kbd>B</kbd> to open the buy menu</div>
+</div>
+
+<!-- ===== BUY MENU ===== -->
+<div id="buy-menu" class="panel" hidden>
+  <div class="panel-head"><h2>ARMORY</h2><div class="panel-cred">◆ <span id="buy-cred">800</span></div><span class="panel-close">B to close</span></div>
+  <div class="buy-cols">
+    <div class="buy-col"><h4>SIDEARMS</h4><div id="buy-side"></div></div>
+    <div class="buy-col"><h4>SMG / SHOTGUN</h4><div id="buy-mid"></div></div>
+    <div class="buy-col"><h4>RIFLES</h4><div id="buy-rifle"></div></div>
+    <div class="buy-col"><h4>SNIPER · HEAVY</h4><div id="buy-heavy"></div></div>
+    <div class="buy-col"><h4>ARMOR</h4><div id="buy-armor"></div>
+      <h4 style="margin-top:14px">TEAM</h4><div id="buy-team" class="team-loadout"></div></div>
+  </div>
+</div>
+
+<!-- ===== SCOREBOARD ===== -->
+<div id="scoreboard" class="panel" hidden>
+  <div class="panel-head"><h2>SCOREBOARD</h2><div id="sb-score">0 — 0</div></div>
+  <div class="sb-team"><h4 class="ally">ALLIES</h4><table><thead><tr><th>Player</th><th>Weapon</th><th>K</th><th>D</th><th>A</th><th>Credits</th></tr></thead><tbody id="sb-ally"></tbody></table></div>
+  <div class="sb-team"><h4 class="enemy">ENEMIES</h4><table><thead><tr><th>Player</th><th>Weapon</th><th>K</th><th>D</th><th>A</th><th>Credits</th></tr></thead><tbody id="sb-enemy"></tbody></table></div>
+</div>
+
+<!-- ===== PAUSE ===== -->
+<section id="pause-screen" class="overlay" hidden>
+  <div class="start-card small">
+    <h2 class="logo sm">PAUSED</h2>
+    <div class="settings">
+      <label>Mouse sensitivity <span id="sens-val2">1.0</span><input id="opt-sens2" type="range" min="0.2" max="3" step="0.05" value="1"></label>
+      <label>Field of view <span id="fov-val2">90</span><input id="opt-fov2" type="range" min="70" max="110" step="1" value="90"></label>
+      <label>Master volume <span id="vol-val2">80%</span><input id="opt-vol2" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+    </div>
+    <button id="btn-resume" class="btn-primary">RESUME</button>
+    <button id="btn-quit" class="btn-ghost">QUIT TO MENU</button>
+  </div>
+</section>
+
+<!-- ===== MATCH END ===== -->
+<section id="end-screen" class="overlay" hidden>
+  <div class="start-card">
+    <div class="eyebrow">MATCH COMPLETE</div>
+    <h1 class="logo" id="end-title">VICTORY</h1>
+    <div id="end-score" class="end-score">7 — 3</div>
+    <div id="end-stats" class="end-stats"></div>
+    <button id="btn-again" class="btn-primary">PLAY AGAIN</button>
+  </div>
+</section>
+
+<!-- Three.js (r128, global build) from CDN, with local fallback for offline use -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>if (!window.THREE) { document.write('<script src="js/vendor/three.min.js"><\/script>'); }</script>
+
+<script src="js/config.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/map.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/player.js"></script>
+<script src="js/bots.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
